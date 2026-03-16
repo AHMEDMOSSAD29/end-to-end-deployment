@@ -1,0 +1,82 @@
+definitions:
+  services:
+    docker:
+      memory: 3072 # 3GB memory for docker builds
+  caches:
+    npm: $HOME/.npm
+
+pipelines:
+  branches:
+    # --- DEV PIPELINE (Automatic on push to dev) ---
+    dev:
+      - step:
+          name: Build and Deploy to DEV
+          image: docker:latest
+          size: '2x'
+          oidc: true # Enables secure connection to AWS without static keys
+          caches:
+            - npm
+          services:
+            - docker
+          script:
+            - apk add --no-cache aws-cli yq git # Tools needed for AWS and manifest updates
+
+            # --- AWS Configuration ---
+            - export AWS_REGION="us-east-1"
+            - export AWS_ROLE_ARN="arn:aws:iam::<YOUR_ACCOUNT_ID>:role/<YOUR_OIDC_ROLE_NAME>"
+            - export AWS_WEB_IDENTITY_TOKEN_FILE=$(pwd)/web-identity-token
+            - echo $BITBUCKET_STEP_OIDC_TOKEN > $(pwd)/web-identity-token
+            - export ECR_REPO_URL="<YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/dev/app-1-dev"
+            - export IMAGE_TAG="v1.${BITBUCKET_BUILD_NUMBER}"
+
+            # --- Docker Build & Push ---
+            - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
+            - docker build -t $ECR_REPO_URL:$IMAGE_TAG .
+            - docker push $ECR_REPO_URL:$IMAGE_TAG
+
+            # --- Update DEV manifest (The GitOps Trigger) ---
+            - yq -i '.spec.template.spec.containers[0].image = "'"$ECR_REPO_URL:$IMAGE_TAG"'"' k8s/dev/deployment.yaml
+
+            # --- Commit & Push changes back to repo ---
+            - git config --global user.email "pipeline@bitbucket.org"
+            - git config --global user.name "Bitbucket Pipeline"
+            - git add k8s/dev/deployment.yaml
+            - git commit -m "[DEV] Update image to $IMAGE_TAG [skip ci]" 
+            - git push
+
+    # --- PRODUCTION PIPELINE (Manual Approval on push to main) ---
+    main:
+      - step:
+          name: Ready to Deploy to Live
+          script:
+            - echo "Commit ready for Production. Click 'Deploy' manually to start."
+      - step:
+          name: Approve, Build, and Deploy to Live
+          image: docker:latest
+          trigger: manual # Manual gate for safety
+          oidc: true
+          services:
+            - docker
+          script:
+            - apk add --no-cache aws-cli yq git
+            - export AWS_REGION="us-east-1"
+            - export AWS_ROLE_ARN="arn:aws:iam::<YOUR_ACCOUNT_ID>:role/<YOUR_OIDC_ROLE_NAME>"
+            - export AWS_WEB_IDENTITY_TOKEN_FILE=$(pwd)/web-identity-token
+            - echo $BITBUCKET_STEP_OIDC_TOKEN > $(pwd)/web-identity-token
+            - export ECR_REPO_URL="<YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/prod/app-1-prod"
+            - export IMAGE_TAG="v1.${BITBUCKET_BUILD_NUMBER}"
+
+            # --- Docker Build & Push ---
+            - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
+            - docker build -t $ECR_REPO_URL:$IMAGE_TAG .
+            - docker push $ECR_REPO_URL:$IMAGE_TAG
+
+            # --- Update PROD manifest ---
+            - yq -i '.spec.template.spec.containers[0].image = "'"$ECR_REPO_URL:$IMAGE_TAG"'"' k8s/prod/deployment.yaml
+
+            # --- Commit & Push ---
+            - git config --global user.email "pipeline@bitbucket.org"
+            - git config --global user.name "Bitbucket Pipeline"
+            - git add k8s/prod/deployment.yaml
+            - git commit -m "[PROD] Deploy image $IMAGE_TAG [skip ci]" 
+            - git push

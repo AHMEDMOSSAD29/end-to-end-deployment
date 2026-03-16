@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-1-dev
+  namespace: app-1-dev
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: app-1-dev
+  template:
+    metadata:
+      labels:
+        app: app-1-dev
+    spec:
+      serviceAccountName: app-1-dev-sa
+      containers:
+        - name: app-1-dev
+          image: <YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/dev/app-1:v1.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          envFrom:
+            - secretRef:
+                name: app-1-dev-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "250Mi"
+            limits:
+              cpu: "200m"
+              memory: "350Mi"
