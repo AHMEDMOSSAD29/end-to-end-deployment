@@ -1,0 +1,55 @@
+stages:
+  - build
+  - update
+
+variables:
+  AWS_REGION: "us-east-1"
+  # Replace with your specific ECR and Role details
+  ECR_REPO_URL: "<YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/dev/app-1-dev"
+  AWS_ROLE_ARN: "arn:aws:iam::<YOUR_ACCOUNT_ID>:role/<YOUR_OIDC_ROLE_NAME>"
+
+# Template for AWS OIDC Authentication
+.aws_auth:
+  image: 
+    name: amazon/aws-cli:latest
+    entrypoint: [""]
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: https://gitlab.com
+  before_script:
+    - mkdir -p ~/.aws
+    - echo "${GITLAB_OIDC_TOKEN}" > /tmp/web_identity_token
+    - printf "[default]\nrole_arn = ${AWS_ROLE_ARN}\nweb_identity_token_file = /tmp/web_identity_token" > ~/.aws/config
+
+build_and_push:
+  stage: build
+  extends: .aws_auth
+  services:
+    - docker:dind
+  script:
+    - amazon-linux-extras install docker
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO_URL
+    - export IMAGE_TAG="v1.${CI_PIPELINE_IID}"
+    - docker build -t $ECR_REPO_URL:$IMAGE_TAG .
+    - docker push $ECR_REPO_URL:$IMAGE_TAG
+    - echo "IMAGE_TAG=$IMAGE_TAG" > build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  only:
+    - dev
+    - main
+
+update_manifest:
+  stage: update
+  image: line/kubectl-kustomize:latest
+  script:
+    - apk add --no-cache yq git
+    - yq -i '.spec.template.spec.containers[0].image = "'"$ECR_REPO_URL:$IMAGE_TAG"'"' k8s/dev/deployment.yaml
+    - git config --global user.email "gitlab-ci@example.com"
+    - git config --global user.name "GitLab CI"
+    - git add k8s/dev/deployment.yaml
+    - git commit -m "[GitLab] Update image to $IMAGE_TAG [skip ci]"
+    - git push "https://${GITLAB_USER_NAME}:${GITLAB_TOKEN}@${CI_REPOSITORY_URL#*@}" HEAD:${CI_COMMIT_REF_NAME}
+  only:
+    - dev
