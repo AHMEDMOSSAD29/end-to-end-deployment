@@ -8,7 +8,7 @@
 
 A **production-ready, platform-agnostic GitOps CI/CD template** that automates:
 
-* 🐳 **Docker image builds** using Nginx for static or web apps
+* 🐳 **Docker image builds** 
 * 🔐 **Secrets management** via **HashiCorp Vault**
 * ☸ **Kubernetes deployments** using **ArgoCD**
 * ☁ **Multi-Cloud CI/CD** support for **GitHub Actions**, **GitLab CI**, and **Bitbucket Pipelines**
