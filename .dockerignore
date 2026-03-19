@@ -1,0 +1,7 @@
+.github
+k8s
+setup
+.gitlab-ci.yml
+bitbucket-pipelines.yml
+Dockerfile
+README.md
