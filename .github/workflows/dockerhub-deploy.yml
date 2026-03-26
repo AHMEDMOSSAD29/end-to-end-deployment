@@ -2,11 +2,23 @@ name: Test Docker Hub Build and Push
 
 on:
   push:
-    branches: [ main, dev ] # Trigger on your existing branches
+    branches: [ main, dev ]
 
 jobs:
-  docker:
+  semgrep:
+    name: Security Scan
     runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run Semgrep
+        run: semgrep scan --config auto --error
+
+  docker:
+    name: Build and Push
+    runs-on: ubuntu-latest
+    needs: semgrep  # This ensures the scan passes before building the image
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -25,7 +37,6 @@ jobs:
         with:
           context: .
           push: true
-          # Tags the image with your username and the unique GitHub run number
           tags: |
             ahmedmosaad594/ahmed-mosaad-resume:latest
             ahmedmosaad594/ahmed-mosaad-resume:v1.${{ github.run_number }}
