@@ -15,10 +15,20 @@ spec:
         app: app-1-prod
     spec:
       serviceAccountName: app-1-prod-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
       containers:
         - name: app-1-prod
           image: <YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/prod/app-1:v1.0
           imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
           ports:
             - containerPort: 80
           envFrom:

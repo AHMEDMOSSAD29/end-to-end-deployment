@@ -1,15 +1,17 @@
-# Use the lightweight Nginx Alpine image
 FROM nginx:alpine
 
-# Remove default nginx static assets
+# Create a non-privileged user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Remove default assets
 RUN rm -rf /usr/share/nginx/html/*
 
-# Copy your static files to the nginx html directory
-# This includes your index.html, style.css, script.js, and the assets folder
+# Copy files and ensure the new user has permissions
 COPY . /usr/share/nginx/html/
+RUN chown -R appuser:appgroup /usr/share/nginx/html
 
-# Expose port 80 to the cluster
+# Switch to the non-root user
+USER appuser
+
 EXPOSE 80
-
-# Start Nginx in the foreground
 CMD ["nginx", "-g", "daemon off;"]
