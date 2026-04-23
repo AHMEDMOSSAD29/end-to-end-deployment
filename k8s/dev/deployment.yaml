@@ -4,38 +4,88 @@ metadata:
   name: app-1-dev
   namespace: app-1-dev
 spec:
-  replicas: 1
-  revisionHistoryLimit: 1
+  replicas: 4
+  revisionHistoryLimit: 3
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+
   selector:
     matchLabels:
       app: app-1-dev
+
   template:
     metadata:
       labels:
         app: app-1-dev
+
     spec:
       serviceAccountName: app-1-dev-sa
-      # --- ADDED: Pod-level security context ---
+
+      # ✅ Pod-level security
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 2000
+
+      # ✅ Topology spread (future-proof)
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: app-1-dev
+
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: app-1-dev
+
       containers:
         - name: app-1-dev
           image: <YOUR_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/dev/app-1:v1.0
           imagePullPolicy: Always
-          # --- ADDED: Container-level security context ---
+
+          # ✅ Container security
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
             runAsNonRoot: true
+
           ports:
             - containerPort: 80
+
+          # ✅ Health probes (VERY important)
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 15
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 45
+            timeoutSeconds: 5
+            periodSeconds: 10
+            failureThreshold: 5
+
           envFrom:
             - secretRef:
                 name: app-1-dev-secrets
+
           resources:
             requests:
               cpu: "100m"
@@ -43,3 +93,14 @@ spec:
             limits:
               cpu: "200m"
               memory: "350Mi"
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: app-1-dev-pdb
+  namespace: app-1-dev
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: app-1-dev
