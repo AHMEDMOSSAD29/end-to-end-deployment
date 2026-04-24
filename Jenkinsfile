@@ -3,7 +3,7 @@ pipeline {
     
     environment {
         // Docker Hub repository details
-        DOCKERHUB_REPO = 'ahmedmosaad594/ahmed-mosaad-resume' 
+        DOCKERHUB_REPO = 'ahmedmosaad112/ahmed-mosaad-resume' 
         // Credential IDs stored in Jenkins Global Credentials
         DOCKERHUB_CRED_ID = 'dockerhub-credentials'
         GIT_CREDENTIALS_ID = 'github-token'
